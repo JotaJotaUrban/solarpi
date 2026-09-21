@@ -1,0 +1,37 @@
+name: solarpi
+
+services:
+  solarpi:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      SOLARPI_API_HOST: 0.0.0.0
+      SOLARPI_API_PORT: "8000"
+      SOLARPI_DATABASE: /app/data/solarpi.sqlite3
+    ports:
+      - "${SOLARPI_WEB_PORT:-8080}:8000"
+    volumes:
+      - solarpi-data:/app/data
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  solarpi-data:

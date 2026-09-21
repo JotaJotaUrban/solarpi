@@ -1,0 +1,4 @@
+# Versions present in the existing local environment.
+pysolarmanv5==3.0.6
+umodbus==1.0.4
+pyserial==3.5

@@ -1,0 +1,2 @@
+"""SolarPi local monitoring application."""
+

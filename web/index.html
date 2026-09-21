@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SolarPi</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body data-solar="idle" data-grid="idle" data-battery="idle" data-connection="offline">
+    <header class="topbar">
+      <div class="statusbar" aria-label="Estado">
+        <button id="weather-pill" class="weather-pill today-weather-pill" type="button" aria-label="Tiempo en Borriol">
+          <span id="current-datetime" class="today-date">--</span>
+          <span id="weather-icon" class="weather-icon weather-unavailable" aria-hidden="true"><i></i></span>
+          <span class="weather-copy">
+            <strong id="weather-place">Borriol</strong>
+            <small id="weather-summary">--</small>
+          </span>
+          <span class="weather-metrics" aria-label="Datos meteorológicos">
+            <strong id="weather-temp" class="weather-current-temp">-- °C</strong>
+            <span class="weather-stack" aria-label="Temperatura prevista de hoy">
+              <span><small>Máx</small><b id="weather-max">--°</b></span>
+              <span><small>Mín</small><b id="weather-min">--°</b></span>
+            </span>
+            <span class="weather-stack" aria-label="Humedad y viento">
+              <span><small>Hum</small><b id="weather-humidity">--%</b></span>
+              <span><small>VTO</small><b id="weather-wind">-- km/h</b></span>
+            </span>
+          </span>
+          <span class="today-production-readout">
+            <small>Producción</small>
+            <strong id="today-production">-- / -- kWh</strong>
+          </span>
+        </button>
+        <div id="tomorrow-pill" class="forecast-pill" aria-label="Previsión para mañana">
+          <span id="tomorrow-icon" class="weather-icon weather-unavailable" aria-hidden="true"><i></i></span>
+          <span class="forecast-copy">
+            <span id="tomorrow-date">--</span>
+            <strong id="tomorrow-temp">-- / -- °C</strong>
+            <small id="tomorrow-production">-- kWh</small>
+          </span>
+        </div>
+        <div class="status-pill inverter-status-pill" id="inverter-status" aria-label="Último dato del inversor">
+          <span class="connection-ecg" aria-hidden="true">
+            <svg viewBox="0 0 160 44" preserveAspectRatio="none">
+              <path class="ecg-baseline ecg-wave-line" d="M0 23 H28 L36 23 L43 10 L52 36 L62 23 H160"></path>
+              <path class="ecg-baseline ecg-flat-line" d="M0 23 H160"></path>
+              <path class="ecg-trace ecg-wave-line" d="M0 23 H28 L36 23 L43 10 L52 36 L62 23 H160"></path>
+              <path class="ecg-trace ecg-flat-line" d="M0 23 H160"></path>
+            </svg>
+          </span>
+          <strong id="last-read">--:--:--</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="cockpit">
+        <div class="energy-map" aria-label="Flujo de energía">
+          <div class="map-grid" aria-hidden="true"></div>
+
+          <div class="flow-link solar-link" id="solar-lane" aria-hidden="true"><span></span></div>
+          <div class="flow-link battery-link" id="battery-lane" aria-hidden="true"><span></span></div>
+          <div class="flow-link grid-link" id="grid-lane" aria-hidden="true"><span></span></div>
+          <div class="flow-link house-link" id="house-lane" aria-hidden="true"><span></span></div>
+
+          <article class="energy-node solar-node">
+            <span>Placas</span>
+            <strong id="solar-power">-- W</strong>
+            <small id="pv-split">PV1 -- + PV2 --</small>
+          </article>
+
+          <div class="core-node">
+            <i aria-hidden="true"></i>
+          </div>
+
+          <article class="energy-node battery-node">
+            <span>Batería</span>
+            <strong id="battery-soc">--%</strong>
+            <small id="battery-flow">--</small>
+            <div class="battery-track" aria-hidden="true">
+              <i id="battery-fill"></i>
+            </div>
+          </article>
+
+          <article class="energy-node grid-node">
+            <span>Red</span>
+            <strong id="grid-power">-- W</strong>
+            <small id="grid-mode">--</small>
+          </article>
+
+          <article class="energy-node house-node">
+            <span>Hogar</span>
+            <strong id="house-power">-- W</strong>
+            <small>Consumo</small>
+          </article>
+        </div>
+
+        <aside class="race-stack" aria-label="Telemetría actual">
+          <article class="race-tile solar-tile">
+            <div class="tile-head">
+              <span>Producción</span>
+              <i id="trend-solar" class="trend neutral"></i>
+            </div>
+            <strong id="metric-solar">-- W</strong>
+            <small id="solar-detail">paneles</small>
+            <canvas id="spark-solar" height="46"></canvas>
+          </article>
+
+          <article class="race-tile house-tile">
+            <div class="tile-head">
+              <span>Demanda</span>
+              <i id="trend-house" class="trend neutral"></i>
+            </div>
+            <strong id="metric-house">-- W</strong>
+            <small>Hogar</small>
+            <canvas id="spark-house" height="46"></canvas>
+          </article>
+
+          <article class="race-tile battery-tile">
+            <div class="tile-head">
+              <span>Batería</span>
+              <i id="trend-battery" class="trend neutral"></i>
+            </div>
+            <strong id="metric-battery">-- W</strong>
+            <small id="battery-detail">estado</small>
+            <canvas id="spark-battery" height="46"></canvas>
+          </article>
+
+          <article class="race-tile grid-tile">
+            <div class="tile-head">
+              <span>Red</span>
+              <i id="trend-grid" class="trend neutral"></i>
+            </div>
+            <strong id="metric-grid">-- W</strong>
+            <small id="grid-detail">balance</small>
+            <canvas id="spark-grid" height="46"></canvas>
+          </article>
+        </aside>
+      </section>
+
+      <section class="charts-grid" aria-label="Gráficas">
+        <article class="chart-panel power-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Histórico</p>
+              <h2>Potencia reciente</h2>
+            </div>
+            <div class="range-tabs" role="tablist" aria-label="Rango">
+              <button class="active" data-minutes="60" type="button">1h</button>
+              <button data-minutes="360" type="button">6h</button>
+              <button data-minutes="1440" type="button">24h</button>
+            </div>
+          </div>
+          <canvas id="history-chart" height="300"></canvas>
+          <div class="legend">
+            <span class="legend-solar">Solar</span>
+            <span class="legend-house">Hogar</span>
+            <span class="legend-grid">Red</span>
+            <span class="legend-battery">Batería</span>
+          </div>
+        </article>
+
+        <article class="chart-panel grid-panel">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Balance</p>
+              <h2>Red</h2>
+            </div>
+            <strong id="grid-readout">--</strong>
+          </div>
+          <canvas id="grid-chart" height="210"></canvas>
+        </article>
+
+        <article class="chart-panel pv-panel">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Strings</p>
+              <h2>PV1 / PV2</h2>
+            </div>
+            <strong id="pv-readout">--</strong>
+          </div>
+          <canvas id="pv-chart" height="210"></canvas>
+        </article>
+      </section>
+
+      <section class="totals-section" aria-label="Acumulados energéticos">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Acumulados</p>
+            <h2>Energía</h2>
+          </div>
+          <div class="total-tabs" role="tablist" aria-label="Rango de acumulados">
+            <button class="active" data-total-range="day" type="button">Día</button>
+            <button data-total-range="month" type="button">Mes</button>
+            <button data-total-range="year" type="button">Año</button>
+          </div>
+        </div>
+
+        <div class="totals-grid">
+          <article class="total-card production-total">
+            <span>Producción</span>
+            <strong id="total-production">-- kWh</strong>
+          </article>
+
+          <article class="total-card consumption-total">
+            <span>Consumo</span>
+            <strong id="total-consumption">-- kWh</strong>
+          </article>
+
+          <article class="total-card grid-import-total">
+            <span>Red consumida</span>
+            <strong id="total-grid-import">-- kWh</strong>
+          </article>
+
+          <article class="total-card grid-export-total">
+            <span>Red vertida</span>
+            <strong id="total-grid-export">-- kWh</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="peaks-section" aria-label="Picos de potencia">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Picos</p>
+            <h2>Potencia máxima</h2>
+          </div>
+          <div class="peak-tabs" role="tablist" aria-label="Rango de picos">
+            <button class="active" data-peak-range="day" type="button">Día</button>
+            <button data-peak-range="month" type="button">Mes</button>
+            <button data-peak-range="year" type="button">Año</button>
+          </div>
+        </div>
+
+        <div class="peaks-grid">
+          <article class="peak-card production-peak">
+            <span>Generada</span>
+            <strong id="peak-production">-- W</strong>
+            <small id="peak-production-at">--</small>
+          </article>
+
+          <article class="peak-card demand-peak">
+            <span>Demandada</span>
+            <strong id="peak-demand">-- W</strong>
+            <small id="peak-demand-at">--</small>
+          </article>
+
+          <article class="peak-card grid-import-peak">
+            <span>Red consumida</span>
+            <strong id="peak-grid-import">-- W</strong>
+            <small id="peak-grid-import-at">--</small>
+          </article>
+
+          <article class="peak-card grid-export-peak">
+            <span>Red vertida</span>
+            <strong id="peak-grid-export">-- W</strong>
+            <small id="peak-grid-export-at">--</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="economics-widget" aria-label="Saldo económico">
+        <div class="economics-widget-head">
+          <div>
+            <p class="eyebrow">Batería virtual</p>
+            <h2>Saldo económico</h2>
+          </div>
+          <div class="economics-period-control">
+            <small id="economics-period">Desde 21/08/2026 00:00</small>
+            <label class="economics-date-picker" aria-label="Fecha de inicio del saldo económico">
+              <span>Inicio</span>
+              <input id="economics-start-date" type="date" value="2026-08-21" />
+            </label>
+          </div>
+        </div>
+
+        <div class="economics-widget-grid">
+          <article class="economics-balance-card" id="economics-balance-card">
+            <span>Saldo</span>
+            <strong id="economics-balance">-- €</strong>
+            <small id="economics-balance-detail">--</small>
+          </article>
+
+          <article class="economics-mini-card economics-export-card">
+            <span>Vertido</span>
+            <strong id="economics-export-credit">-- €</strong>
+            <small id="economics-export-detail">-- kWh · -- €/kWh</small>
+          </article>
+
+          <article class="economics-mini-card economics-recovery-card">
+            <span>Recuperado</span>
+            <strong id="economics-recovery-cost">-- €</strong>
+            <small id="economics-recovery-detail">-- kWh · -- €/kWh</small>
+          </article>
+
+          <article class="economics-mini-card economics-equivalent-card">
+            <span>Disponible</span>
+            <strong id="economics-recoverable-energy">-- kWh</strong>
+            <small id="economics-rate-detail">0,060 / 0,136 €/kWh</small>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="system-footer" aria-label="Salud del sistema">
+      <span class="system-footer-title">RPI</span>
+      <span>CPU <strong id="system-cpu">--%</strong></span>
+      <span>RAM <strong id="system-ram">--%</strong></span>
+      <span>HD <strong id="system-storage">--%</strong></span>
+      <span>Temp <strong id="system-temp">-- °C</strong></span>
+    </footer>
+  </body>
+</html>

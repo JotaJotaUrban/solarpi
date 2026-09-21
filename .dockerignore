@@ -1,0 +1,7 @@
+**
+!Dockerfile
+!requirements.txt
+!solarpi/
+!solarpi/*.py
+!web/
+!web/**

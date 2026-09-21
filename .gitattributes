@@ -1,0 +1,2 @@
+# Preserve the historical snapshot byte for byte, including line endings.
+legacy/** -text

@@ -45,7 +45,7 @@ class BackupTests(unittest.TestCase):
         self.writer.execute("INSERT INTO economics_balance_cache VALUES ('2026-01-01', '2026-09-22', '{}')")
         self.writer.commit()
         self.server = SolarPiHTTPServer(("127.0.0.1", 0), SolarPiRequestHandler)
-        self.server.settings = replace(load_settings(), database_path=self.path, backup_token="test-secret")
+        self.server.settings = replace(load_settings(), database_path=self.path)
         self.server.service = Worker()
         self.server.metrics = Worker()
         self.server.system_monitor = object()
@@ -61,7 +61,7 @@ class BackupTests(unittest.TestCase):
         self.temp.cleanup()
 
     def request(self, path, data=None, headers=None):
-        defaults = {"Authorization": "Bearer test-secret"}
+        defaults = {}
         if data is not None:
             defaults.update({"Content-Type": "application/vnd.sqlite3", "X-SolarPi-Confirm": "replace-database"})
         defaults.update(headers or {})
@@ -99,12 +99,9 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(self.request('/api/health')[0], 200)
         self.assertFalse(list(self.root.glob('backup-*')) + list(self.root.glob('restore-*')))
 
-    def test_access_and_confirmation(self):
-        self.assertEqual(self.request('/api/backup', headers={'Authorization': ''})[0], 401)
+    def test_no_authentication_required_but_restore_needs_confirmation(self):
+        self.assertEqual(self.request('/api/backup')[0], 200)
         self.assertEqual(self.request('/api/restore', b'bad', {'X-SolarPi-Confirm': ''})[0], 400)
-        self.assertEqual(self.request('/api/restore', b'bad', {'Authorization': ''})[0], 401)
-        self.server.settings = replace(self.server.settings, backup_token='')
-        self.assertEqual(self.request('/api/backup')[0], 503)
         self.assertEqual(self.marker(), 'original')
 
     def test_invalid_upload_does_not_stop_or_modify_current_database(self):

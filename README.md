@@ -36,16 +36,15 @@ Copiar el resultado a otro dispositivo. La automatización de copias y la import
 
 ## API de backup y restauración completa
 
-Configurar `SOLARPI_BACKUP_TOKEN` en `.env` con una clave aleatoria larga (por ejemplo, generada con `openssl rand -hex 32`) y recrear el contenedor con `sudo docker compose up -d`. Sin clave, estos endpoints devuelven 503. No publicar la clave en Git ni incluirla en URLs. La clave protege ambos endpoints; la web existente sigue funcionando igual. Utilizar desde el servidor o una red de confianza; para acceso remoto, usar HTTPS o un túnel SSH.
+Los endpoints funcionan sin autenticación ni configuración de claves, igual que el resto de la API. La restauración requiere una cabecera explícita de confirmación del reemplazo.
 
 - `GET /api/backup`: descarga SQLite completo y consistente, incluyendo datos confirmados del WAL, mientras continúa la recogida. No incluye `.env` ni la imagen Docker.
 - `POST /api/restore`: recibe el archivo SQLite como cuerpo binario, valida integridad y esquema, detiene y espera a los trabajadores, reemplaza toda la base usando una transacción de SQLite y vuelve a arrancar con las cachés en memoria renovadas. No combina registros. Requiere `X-SolarPi-Confirm: replace-database`.
 
-Ejemplo desde Debian, introduciendo la clave sin escribirla literalmente en el historial de Bash:
+Descarga desde Debian:
 
 ```bash
-read -rsp 'Clave de backup: ' SOLARPI_TOKEN; echo
-curl --fail --show-error -H "Authorization: Bearer $SOLARPI_TOKEN" \
+curl --fail --show-error \
   http://localhost/api/backup -o solarpi-completa.sqlite3
 ```
 
@@ -53,19 +52,17 @@ Restauración **destructiva para los datos actuales del destino**:
 
 ```bash
 curl --fail --show-error \
-  -H "Authorization: Bearer $SOLARPI_TOKEN" \
   -H 'X-SolarPi-Confirm: replace-database' \
   -H 'Content-Type: application/vnd.sqlite3' \
   --data-binary @solarpi-completa.sqlite3 \
   http://localhost/api/restore
-unset SOLARPI_TOKEN
 ```
 
-Para migrar: desplegar la misma versión de SolarPi en otro host, configurar su `.env` y su clave, e importar allí el archivo descargado. Detener la instancia original al hacer el cambio definitivo; cada instancia recoge datos independientemente.
+Para migrar: desplegar la misma versión de SolarPi en otro host, configurar su `.env` e importar allí el archivo descargado. Detener la instancia original al hacer el cambio definitivo; cada instancia recoge datos independientemente.
 
 Se acepta el esquema completo de esta versión (no SQL, CSV ni bases parciales recuperadas de la SD), con un máximo de 4 GiB por subida y 60 segundos de espera por bloque de red. Se requiere espacio libre para el archivo temporal y los archivos de transacción de SQLite. Las peticiones HTTP se serializan durante la operación; la restauración pausa las lecturas una vez validado el archivo. Un archivo inválido no detiene el recolector ni modifica los datos. Una copia SQLite interrumpida revierte la transacción. No se conservan copias automáticas: los temporales se eliminan al terminar la petición. Tras una interrupción brusca del proceso pueden quedar directorios temporales `backup-*`, `restore-*` o `schema-*` en el volumen.
 
-Pruebas locales: `python -m unittest discover -s tests -v`. Cubren exportación con WAL, restauración completa, reinicialización de trabajadores, autorización, rechazo de archivos incompatibles y cancelación de copia con reversión.
+Pruebas locales: `python -m unittest discover -s tests -v`. Cubren exportación con WAL, restauración completa sin autenticación, reinicialización de trabajadores, confirmación del reemplazo, rechazo de archivos incompatibles y cancelación de copia con reversión.
 
 ## Operación
 

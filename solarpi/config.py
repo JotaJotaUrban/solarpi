@@ -63,7 +63,6 @@ class Settings:
     totals_max_gap_seconds: float
     summary_update_seconds: float
     system_update_seconds: float
-    backup_token: str = ""
 
 
 def load_settings() -> Settings:
@@ -90,5 +89,4 @@ def load_settings() -> Settings:
         totals_max_gap_seconds=_env_float("SOLARPI_TOTALS_MAX_GAP_SECONDS", 300.0),
         summary_update_seconds=_env_float("SOLARPI_SUMMARY_UPDATE_SECONDS", 60.0),
         system_update_seconds=_env_float("SOLARPI_SYSTEM_UPDATE_SECONDS", 30.0),
-        backup_token=_env_str("SOLARPI_BACKUP_TOKEN", ""),
     )

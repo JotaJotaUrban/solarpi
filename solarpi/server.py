@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import hmac
 import shutil
 import tempfile
 import threading
@@ -88,8 +87,7 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
 
         try:
             if path == "/api/backup":
-                if self._authorize_backup():
-                    self._download_backup()
+                self._download_backup()
                 return
             if path == "/":
                 self._serve_file(WEB_DIR / "index.html")
@@ -174,17 +172,6 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         print("%s - %s" % (self.address_string(), fmt % args))
 
-    def _authorize_backup(self) -> bool:
-        token = self.server.settings.backup_token
-        if not token:
-            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"detail": "Configure SOLARPI_BACKUP_TOKEN first"})
-            return False
-        supplied = self.headers.get("Authorization", "")
-        if not hmac.compare_digest(supplied.encode(), ("Bearer " + token).encode()):
-            self._json(HTTPStatus.UNAUTHORIZED, {"detail": "Invalid backup token"})
-            return False
-        return True
-
     def _download_backup(self) -> None:
         with tempfile.TemporaryDirectory(prefix="backup-", dir=self.server.settings.database_path.parent) as folder:
             path = Path(folder) / "solarpi.sqlite3"
@@ -204,8 +191,6 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         if urlsplit(self.path).path != "/api/restore":
             self._json(HTTPStatus.NOT_FOUND, {"detail": "Not found"})
-            return
-        if not self._authorize_backup():
             return
         if self.headers.get("X-SolarPi-Confirm") != "replace-database":
             self._json(HTTPStatus.BAD_REQUEST, {"detail": "Set X-SolarPi-Confirm: replace-database to replace ALL current data"})

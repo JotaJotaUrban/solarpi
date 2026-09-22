@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import hmac
+import shutil
+import tempfile
+import threading
 from datetime import date, datetime, timedelta, timezone, tzinfo
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .computed_metrics import ComputedMetricsService
 from .config import ROOT_DIR, Settings
 from .deye import DeyeReader
+from .database_backup import copy_database, validate_database
 from .economics import (
     ECONOMICS_DEFAULT_START_DATE,
 )
@@ -38,6 +43,31 @@ def create_service(settings: Settings) -> SolarPiService:
 class SolarPiHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.database_lock = threading.RLock()
+
+    def restore_database(self, path: Path) -> None:
+        # Called under database_lock: no HTTP request can retain old state.
+        try:
+            self.metrics.stop(wait=True)
+            self.service.stop(wait=True)
+            copy_database(path, self.settings.database_path)
+        finally:
+            # Fresh objects discard all caches and latest readings from the old DB.
+            self.service = create_service(self.settings)
+            self.weather = WeatherClient(
+                cache_seconds=self.settings.weather_cache_seconds,
+                timeout_seconds=self.settings.weather_timeout_seconds,
+            )
+            self.metrics = ComputedMetricsService(
+                settings=self.settings, solar_service=self.service,
+                store=self.service.store, weather=self.weather,
+                system_monitor=self.system_monitor,
+            )
+            self.service.start()
+            self.metrics.start()
+
     settings: Settings
     service: SolarPiService
     metrics: ComputedMetricsService
@@ -49,10 +79,18 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
     server_version = "SolarPi/0.1"
 
     def do_GET(self) -> None:
+        with self.server.database_lock:
+            self._get()
+
+    def _get(self) -> None:
         parsed = urlsplit(self.path)
         path = parsed.path
 
         try:
+            if path == "/api/backup":
+                if self._authorize_backup():
+                    self._download_backup()
+                return
             if path == "/":
                 self._serve_file(WEB_DIR / "index.html")
                 return
@@ -135,6 +173,76 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args: Any) -> None:
         print("%s - %s" % (self.address_string(), fmt % args))
+
+    def _authorize_backup(self) -> bool:
+        token = self.server.settings.backup_token
+        if not token:
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"detail": "Configure SOLARPI_BACKUP_TOKEN first"})
+            return False
+        supplied = self.headers.get("Authorization", "")
+        if not hmac.compare_digest(supplied.encode(), ("Bearer " + token).encode()):
+            self._json(HTTPStatus.UNAUTHORIZED, {"detail": "Invalid backup token"})
+            return False
+        return True
+
+    def _download_backup(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="backup-", dir=self.server.settings.database_path.parent) as folder:
+            path = Path(folder) / "solarpi.sqlite3"
+            path.touch()
+            copy_database(self.server.settings.database_path, path)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/vnd.sqlite3")
+            self.send_header("Content-Disposition", f'attachment; filename="solarpi-{stamp}.sqlite3"')
+            self.send_header("Content-Length", str(path.stat().st_size))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            with path.open("rb") as stream:
+                shutil.copyfileobj(stream, self.wfile, length=1024 * 1024)
+
+    def do_POST(self) -> None:
+        self.close_connection = True
+        if urlsplit(self.path).path != "/api/restore":
+            self._json(HTTPStatus.NOT_FOUND, {"detail": "Not found"})
+            return
+        if not self._authorize_backup():
+            return
+        if self.headers.get("X-SolarPi-Confirm") != "replace-database":
+            self._json(HTTPStatus.BAD_REQUEST, {"detail": "Set X-SolarPi-Confirm: replace-database to replace ALL current data"})
+            return
+        if self.headers.get("Transfer-Encoding"):
+            self._json(HTTPStatus.BAD_REQUEST, {"detail": "Chunked uploads are not supported"})
+            return
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            size = 0
+        if size <= 0 or size > 4 * 1024**3:
+            self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"detail": "Upload a SQLite file between 1 byte and 4 GiB"})
+            return
+        if self.headers.get_content_type() not in ("application/octet-stream", "application/vnd.sqlite3"):
+            self._json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"detail": "Send the raw SQLite file, not multipart or SQL"})
+            return
+        with self.server.database_lock:
+            try:
+                self.connection.settimeout(60)
+                with tempfile.TemporaryDirectory(prefix="restore-", dir=self.server.settings.database_path.parent) as folder:
+                    path = Path(folder) / "uploaded.sqlite3"
+                    remaining = size
+                    with path.open("wb") as stream:
+                        while remaining:
+                            chunk = self.rfile.read(min(1024 * 1024, remaining))
+                            if not chunk:
+                                raise ValueError("Incomplete upload; current database unchanged")
+                            stream.write(chunk)
+                            remaining -= len(chunk)
+                    validate_database(path)
+                    self.server.restore_database(path)
+                self._json(HTTPStatus.OK, {"status": "ok", "detail": "Full database restored; collection resumed"})
+            except ValueError as exc:
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": str(exc)})
+            except Exception as exc:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"detail": str(exc)})
 
     def _latest(self, include_raw: bool) -> None:
         snapshot = self.server.service.get_latest()
@@ -415,5 +523,6 @@ def run_server(settings: Settings) -> None:
         print("\nSolarPi stopped")
     finally:
         server.server_close()
-        metrics.stop()
-        service.stop()
+        with server.database_lock:
+            server.metrics.stop(wait=True)
+            server.service.stop(wait=True)

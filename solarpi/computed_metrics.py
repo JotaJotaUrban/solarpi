@@ -56,10 +56,10 @@ class ComputedMetricsService:
         )
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, wait: bool = False) -> None:
         self._stop_event.set()
         if self._thread:
-            self._thread.join(timeout=5)
+            self._thread.join(timeout=None if wait else 5)
 
     def refresh_all(self) -> None:
         self.refresh_system_health()

@@ -12,7 +12,7 @@ services:
       SOLARPI_API_PORT: "8000"
       SOLARPI_DATABASE: /app/data/solarpi.sqlite3
     ports:
-      - "${SOLARPI_WEB_PORT:-8080}:8000"
+      - "${SOLARPI_WEB_PORT:-80}:8000"
     volumes:
       - solarpi-data:/app/data
     stop_signal: SIGINT

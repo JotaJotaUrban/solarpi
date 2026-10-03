@@ -101,7 +101,9 @@ class BackupTests(unittest.TestCase):
 
     def test_no_authentication_required_but_restore_needs_confirmation(self):
         self.assertEqual(self.request('/api/backup')[0], 200)
-        self.assertEqual(self.request('/api/restore', b'bad', {'X-SolarPi-Confirm': ''})[0], 400)
+        # Header rejection happens before the body is sent (avoids a Windows
+        # socket reset from deliberately unread request bytes).
+        self.assertEqual(self.request('/api/restore', b'', {'X-SolarPi-Confirm': '', 'Content-Length': '3'})[0], 400)
         self.assertEqual(self.marker(), 'original')
 
     def test_invalid_upload_does_not_stop_or_modify_current_database(self):
@@ -114,7 +116,7 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(self.request('/api/restore', other.read_bytes())[0], 400)
         self.assertFalse(self.server.service.stopped)
         self.assertEqual(self.marker(), 'original')
-        self.assertEqual(self.request('/api/restore', b'x', {'Content-Type': 'text/plain'})[0], 415)
+        self.assertEqual(self.request('/api/restore', b'', {'Content-Type': 'text/plain', 'Content-Length': '1'})[0], 415)
         self.assertFalse(list(self.root.glob('restore-*')))
 
     def test_failed_copy_resumes_service_without_changing_database(self):

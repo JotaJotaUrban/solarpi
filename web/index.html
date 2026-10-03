@@ -6,6 +6,7 @@
     <title>SolarPi</title>
     <link rel="stylesheet" href="/static/styles.css" />
     <script src="/static/app.js" defer></script>
+    <script src="/static/weather-alerts.js" defer></script>
   </head>
   <body data-solar="idle" data-grid="idle" data-battery="idle" data-connection="offline">
     <header class="topbar">
@@ -54,6 +55,15 @@
         </div>
       </div>
     </header>
+
+    <section id="weather-alerts" class="weather-alerts" aria-label="Avisos meteorológicos de Castellón" aria-live="polite" hidden>
+      <div class="weather-alerts-heading">
+        <strong>⚠ Avisos · Castellón</strong>
+        <small id="weather-alerts-status"></small>
+        <a href="https://meteoalarm.org/" target="_blank" rel="noopener noreferrer">AEMET · MeteoAlarm</a>
+      </div>
+      <div id="weather-alerts-list" class="weather-alerts-list"></div>
+    </section>
 
     <main class="layout">
       <section class="cockpit">

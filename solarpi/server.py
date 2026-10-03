@@ -24,6 +24,7 @@ from .service import SolarPiService
 from .store import SnapshotStore
 from .system_health import SystemMonitor
 from .weather import DEFAULT_LOCATION, WeatherClient
+from .weather_alerts import WeatherAlerts
 
 
 WEB_DIR = ROOT_DIR / "web"
@@ -45,6 +46,7 @@ class SolarPiHTTPServer(ThreadingHTTPServer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.database_lock = threading.RLock()
+        self.weather_alerts = WeatherAlerts()
 
     def restore_database(self, path: Path) -> None:
         # Called under database_lock: no HTTP request can retain old state.
@@ -78,6 +80,9 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
     server_version = "SolarPi/0.1"
 
     def do_GET(self) -> None:
+        if urlsplit(self.path).path == "/api/weather-alerts":
+            self._json(HTTPStatus.OK, self.server.weather_alerts.snapshot())
+            return
         with self.server.database_lock:
             self._get()
 
@@ -508,12 +513,14 @@ def run_server(settings: Settings) -> None:
 
     service.start()
     metrics.start()
+    server.weather_alerts.start()
     try:
         print("SolarPi listening on http://%s:%s" % (settings.api_host, settings.api_port))
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nSolarPi stopped")
     finally:
+        server.weather_alerts.stop()
         server.server_close()
         with server.database_lock:
             server.metrics.stop(wait=True)

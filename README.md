@@ -66,6 +66,14 @@ Pruebas locales: `python -m unittest discover -s tests -v`. Cubren exportación 
 
 ## Operación
 
+### Avisos meteorológicos de Castellón
+
+El widget debajo de la barra meteorológica muestra los avisos amarillos, naranjas y rojos publicados para toda la provincia de Castellón, incluidos los próximos y todas las clases de fenómeno presentes en el feed. Incluye zona y vigencia en horario de Madrid; los enlaces llevan a la información oficial de AEMET. Se oculta cuando no quedan avisos vigentes o próximos.
+
+Fuente: avisos AEMET distribuidos por el [feed Atom público de MeteoAlarm](https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-spain), sin clave API. Se consulta cada cinco minutos en un hilo independiente; la pantalla consulta `/api/weather-alerts` cada 30 segundos. No cambia al seleccionar Mérida: siempre vigila Castellón.
+
+Los avisos se conservan únicamente en memoria. Si falla la fuente se mantienen los últimos avisos no caducados, marcados como sin actualizar. Si aún no hay datos disponibles, el widget permanece oculto; esto no equivale a confirmar que no hay avisos. El endpoint distingue `loading`, `ok` y `unavailable`, con fecha de la última consulta correcta. Los errores quedan en los logs. No se añaden tablas ni se modifica el formato de los backups. Datos de AEMET vía MeteoAlarm/EUMETNET, [licencia CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ```bash
 sudo docker compose ps
 sudo docker compose logs --tail=100 -f

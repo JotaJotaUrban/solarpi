@@ -302,19 +302,37 @@ class SnapshotStore:
         return dict(row) if row else None
 
     def history(self, minutes: int = 60, limit: int = 720) -> List[Dict[str, Any]]:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        if minutes < 1 or limit < 1:
+            raise ValueError("minutes and limit must be positive")
+        end = datetime.now(timezone.utc)
+        cutoff = end - timedelta(minutes=minutes)
         with self._connection() as conn:
             rows = conn.execute(
                 """
+                WITH ranked AS (
+                    SELECT ts, source, house_power_w, pv1_power_w, pv2_power_w,
+                        solar_power_w, battery_soc_percent, battery_power_w,
+                        grid_power_w, inverter_power_w,
+                        ROW_NUMBER() OVER (ORDER BY ts, id) AS position,
+                        COUNT(*) OVER () AS total
+                    FROM snapshots
+                    WHERE ts >= :start AND ts <= :end
+                )
                 SELECT ts, source, house_power_w, pv1_power_w, pv2_power_w,
                     solar_power_w, battery_soc_percent, battery_power_w,
                     grid_power_w, inverter_power_w
-                FROM snapshots
-                WHERE ts >= ?
-                ORDER BY ts ASC
-                LIMIT ?
+                FROM ranked
+                -- Evenly sample the whole interval, retaining both endpoints.
+                WHERE total <= :limit
+                    OR (:limit = 1 AND position = total)
+                    OR (:limit > 1 AND (
+                        position = 1
+                        OR (position - 1) * (:limit - 1) / (total - 1)
+                           > (position - 2) * (:limit - 1) / (total - 1)
+                    ))
+                ORDER BY position
                 """,
-                (cutoff.isoformat(), limit),
+                {"start": cutoff.isoformat(), "end": end.isoformat(), "limit": limit},
             ).fetchall()
         return [dict(row) for row in rows]
 

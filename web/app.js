@@ -795,11 +795,13 @@ async function fetchHealth() {
 }
 
 async function fetchHistory() {
-  const response = await fetch(`/api/history?minutes=${state.historyMinutes}&limit=900`, {
+  const minutes = state.historyMinutes;
+  const response = await fetch(`/api/history?minutes=${minutes}&limit=900`, {
     cache: "no-store",
   });
   if (!response.ok) throw new Error(`history ${response.status}`);
   const payload = await response.json();
+  if (state.historyMinutes !== minutes) return;
   state.historyPoints = payload.points || [];
   state.lastHistoryFetch = Date.now();
   drawAllCharts();

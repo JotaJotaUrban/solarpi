@@ -346,7 +346,8 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
     def _economics_balance(self, query: Dict[str, Any]) -> None:
         settings = self.server.settings
         tz = _timezone(settings.timezone_name)
-        default_start = ECONOMICS_DEFAULT_START_DATE.isoformat()
+        now = datetime.now(tz)
+        default_start = now.date().replace(day=1).isoformat()
         raw_start = str(query.get("start_date", [default_start])[0]).strip()
         start_day = _date_from_iso(raw_start)
         if start_day is None:
@@ -362,7 +363,13 @@ class SolarPiRequestHandler(BaseHTTPRequestHandler):
         if start_at > now:
             raise ValueError("start_date cannot be in the future")
 
-        self._json(HTTPStatus.OK, self.server.metrics.economics_balance(start_day))
+        raw_end = str(query.get("end_date", [now.date().isoformat()])[0]).strip()
+        end_day = _date_from_iso(raw_end)
+        if end_day is None:
+            raise ValueError("end_date must be YYYY-MM-DD")
+        if start_day > end_day or end_day > now.date():
+            raise ValueError("Expected start_date <= end_date <= today")
+        self._json(HTTPStatus.OK, self.server.metrics.economics_balance(start_day, end_day))
 
     def _peaks(self) -> None:
         payload = self.server.metrics.latest_power_peak_summaries()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, Optional
 
 from .config import Settings
@@ -21,8 +21,16 @@ def build_economics_balance_payload(
     now: datetime,
     latest: Optional[InverterSnapshot],
     use_sampled_totals: bool = False,
+    end_day: Optional[date] = None,
 ) -> Dict[str, Any]:
     tz = now.tzinfo
+    end_day = end_day or now.date()
+    if start_day > end_day or end_day > now.date():
+        raise ValueError("Expected start_date <= end_date <= today")
+    next_day = end_day + timedelta(days=1)
+    end_at = min(now, datetime(next_day.year, next_day.month, next_day.day, tzinfo=tz))
+    if end_day < now.date():
+        latest = None
     start_at = datetime(
         start_day.year,
         start_day.month,
@@ -32,14 +40,14 @@ def build_economics_balance_payload(
     if use_sampled_totals:
         totals = store.energy_totals_sampled(
             start=start_at,
-            end=now,
+            end=end_at,
             sample_seconds=settings.poll_interval_seconds,
             max_gap_seconds=settings.totals_max_gap_seconds,
         )
     else:
         totals = store.energy_totals_daily_summarized(
             start=start_at,
-            end=now,
+            end=end_at,
             timezone_name=settings.timezone_name,
             tz=tz,
             latest=latest,
@@ -57,8 +65,10 @@ def build_economics_balance_payload(
         "timezone": settings.timezone_name,
         "generated_at": now.isoformat(),
         "start_date": start_day.isoformat(),
+        "end_date": end_day.isoformat(),
+        "end_at": end_at.isoformat(),
         "start_at": start_at.isoformat(),
-        "period_label": "Desde %s 00:00" % start_day.strftime("%d/%m/%Y"),
+        "period_label": "Del %s al %s" % (start_day.strftime("%d/%m/%Y"), end_day.strftime("%d/%m/%Y")),
         "exported_kwh": exported_kwh,
         "imported_kwh": imported_kwh,
         "recovered_kwh": imported_kwh,

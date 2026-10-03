@@ -119,10 +119,11 @@ class ComputedMetricsService:
                 self._latest_economics_balances.get(start_day.isoformat())
             )
 
-    def economics_balance(self, start_day: date) -> Dict[str, Any]:
+    def economics_balance(self, start_day: date, end_day: Optional[date] = None) -> Dict[str, Any]:
         payload = self._economics_balance(
             self.solar_service.get_latest(),
             start_day,
+            end_day=end_day,
         )
         return payload
 
@@ -270,6 +271,7 @@ class ComputedMetricsService:
         self,
         latest: Optional[InverterSnapshot],
         start_day: date,
+        end_day: Optional[date] = None,
     ) -> Dict[str, Any]:
         return build_economics_balance_payload(
             settings=self.settings,
@@ -277,6 +279,7 @@ class ComputedMetricsService:
             start_day=start_day,
             now=datetime.now(_timezone(self.settings.timezone_name)),
             latest=latest,
+            end_day=end_day,
         )
 
 

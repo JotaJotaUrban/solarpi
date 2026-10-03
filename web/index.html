@@ -268,11 +268,17 @@
             <h2>Saldo económico</h2>
           </div>
           <div class="economics-period-control">
-            <small id="economics-period">Desde 21/08/2026 00:00</small>
+            <small id="economics-period">Mes actual</small>
+            <div class="economics-date-range">
             <label class="economics-date-picker" aria-label="Fecha de inicio del saldo económico">
               <span>Inicio</span>
-              <input id="economics-start-date" type="date" value="2026-08-21" />
+              <input id="economics-start-date" type="date" required />
             </label>
+            <label class="economics-date-picker" aria-label="Fecha de fin del saldo económico">
+              <span>Fin</span>
+              <input id="economics-end-date" type="date" required />
+            </label>
+            </div>
           </div>
         </div>
 

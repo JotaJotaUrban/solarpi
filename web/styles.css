@@ -1301,6 +1301,13 @@ canvas {
   text-transform: uppercase;
 }
 
+.economics-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .economics-date-picker input {
   width: 116px;
   border: 0;

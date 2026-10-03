@@ -1,4 +1,5 @@
-const DEFAULT_ECONOMICS_START_DATE = "2026-08-21";
+const DEFAULT_ECONOMICS_END_DATE = formatDateInputValue();
+const DEFAULT_ECONOMICS_START_DATE = `${DEFAULT_ECONOMICS_END_DATE.slice(0, 7)}-01`;
 
 const state = {
   historyMinutes: 60,
@@ -15,6 +16,7 @@ const state = {
   totalRange: "day",
   totals: null,
   economicsStartDate: DEFAULT_ECONOMICS_START_DATE,
+  economicsEndDate: DEFAULT_ECONOMICS_END_DATE,
   economicsBalance: null,
   peakRange: "day",
   peaks: null,
@@ -82,6 +84,7 @@ const els = {
   economics: {
     period: document.querySelector("#economics-period"),
     startDate: document.querySelector("#economics-start-date"),
+    endDate: document.querySelector("#economics-end-date"),
     balanceCard: document.querySelector("#economics-balance-card"),
     balance: document.querySelector("#economics-balance"),
     balanceDetail: document.querySelector("#economics-balance-detail"),
@@ -192,10 +195,9 @@ function formatDateInputValue(date = new Date()) {
   ].join("-");
 }
 
-function formatEconomicsPeriod(value) {
-  const parts = String(value || DEFAULT_ECONOMICS_START_DATE).split("-");
-  if (parts.length !== 3) return `Desde ${DEFAULT_ECONOMICS_START_DATE} 00:00`;
-  return `Desde ${parts[2]}/${parts[1]}/${parts[0]} 00:00`;
+function formatEconomicsPeriod(value, end = state.economicsEndDate) {
+  const label = (day) => String(day).split("-").reverse().join("/");
+  return `Del ${label(value)} al ${label(end)}`;
 }
 
 function formatHeaderDateTime(date = new Date()) {
@@ -824,12 +826,14 @@ async function fetchTotals() {
   updateTotals(await response.json());
 }
 
-async function fetchEconomicsBalance(startDate = state.economicsStartDate) {
-  const response = await fetch(`/api/economics-balance?start_date=${encodeURIComponent(startDate)}`, {
+async function fetchEconomicsBalance(startDate = state.economicsStartDate, endDate = state.economicsEndDate) {
+  const response = await fetch(`/api/economics-balance?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`, {
     cache: "no-store",
   });
   if (!response.ok) throw new Error(`economics ${response.status}`);
-  updateEconomicsBalance(await response.json());
+  const payload = await response.json();
+  if (startDate !== state.economicsStartDate || endDate !== state.economicsEndDate) return;
+  updateEconomicsBalance(payload);
 }
 
 async function fetchPeaks() {
@@ -1120,14 +1124,27 @@ els.weatherPill.addEventListener("click", () => {
 });
 
 function setupEconomicsStartPicker() {
-  if (!els.economics.startDate) return;
-  els.economics.startDate.value = state.economicsStartDate;
-  els.economics.startDate.max = formatDateInputValue();
-  els.economics.startDate.addEventListener("change", () => {
-    state.economicsStartDate = els.economics.startDate.value || DEFAULT_ECONOMICS_START_DATE;
+  const start = els.economics.startDate;
+  const end = els.economics.endDate;
+  if (!start || !end) return;
+  start.value = state.economicsStartDate;
+  end.value = state.economicsEndDate;
+  function limits() {
+    start.max = end.value || formatDateInputValue();
+    end.min = start.value;
+    end.max = formatDateInputValue();
+  }
+  limits();
+  function changed() {
+    limits();
+    if (!start.reportValidity() || !end.reportValidity()) return;
+    state.economicsStartDate = start.value;
+    state.economicsEndDate = end.value;
     clearEconomicsBalance();
     fetchEconomicsBalance().catch(clearEconomicsBalance);
-  });
+  }
+  start.addEventListener("change", changed);
+  end.addEventListener("change", changed);
 }
 
 window.addEventListener("resize", drawAllCharts);
